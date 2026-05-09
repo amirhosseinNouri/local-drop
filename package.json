@@ -3,17 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/print-lan-url.mjs && next dev -H 0.0.0.0",
     "build": "next build",
-    "start": "next start"
+    "start": "node scripts/print-lan-url.mjs && next start -H 0.0.0.0"
   },
   "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "nanoid": "^5.1.11",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
