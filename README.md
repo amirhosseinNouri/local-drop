@@ -1,36 +1,118 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LocalDrop
+
+Temporary file and text sharing on your local network. Anyone on the same Wi-Fi opens a URL and can drop files or paste text — instantly visible to everyone else.
+
+No accounts. No cloud. No external services. Data lives in a SQLite file and a local uploads folder until you delete it.
+
+## Features
+
+- Drag-and-drop file upload (up to 1 GB per file)
+- Paste-text snippets with one-click copy
+- Per-item delete button (file or text)
+- Live list refresh every 3 seconds
+- Auto-prints LAN-reachable URLs on start
+- Dark mode aware
+
+## Stack
+
+- Next.js 16 (App Router) + Turbopack
+- React 19, TypeScript, Tailwind CSS v4
+- `better-sqlite3` for metadata, filesystem for blobs
+- `nanoid` for item IDs
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The dev script binds to `0.0.0.0` and prints every reachable LAN URL, e.g.:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+LocalDrop will be reachable at:
+  http://localhost:3000
+  http://192.168.1.42:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Share the LAN URL with anyone on the same network.
 
-## Learn More
+### Production
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run build
+npm start
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### macOS firewall
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+First run may prompt to allow incoming connections — accept, otherwise other devices on the LAN cannot reach the server.
 
-## Deploy on Vercel
+## Project Layout
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/
+  lib/
+    db.ts                   # SQLite schema + prepared statements
+  app/
+    layout.tsx
+    page.tsx                # server entry, renders HomeClient
+    HomeClient.tsx          # client UI: upload, paste, list, delete
+    api/
+      items/route.ts        # POST upload (multipart) / POST text (JSON) / GET list
+      items/[id]/route.ts   # DELETE item (also unlinks file)
+      files/[id]/route.ts   # GET — streams file with Content-Disposition
+scripts/
+  print-lan-url.mjs         # prints LAN URLs before next start/dev
+.localdrop/                 # git-ignored runtime data
+  data.db                   # SQLite database
+  uploads/                  # uploaded blobs as `<id>__<safe-name>`
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Data Model
+
+Single `items` table:
+
+| column     | type    | notes                                  |
+| ---------- | ------- | -------------------------------------- |
+| id         | TEXT PK | nanoid(12)                             |
+| kind       | TEXT    | `'file'` or `'text'`                   |
+| name       | TEXT    | original filename or `'Text snippet'`  |
+| content    | TEXT    | text body (null for files)             |
+| mime       | TEXT    | MIME type                              |
+| size       | INTEGER | bytes                                  |
+| created_at | INTEGER | epoch ms                               |
+
+## API
+
+| Method | Path                | Body                                   | Returns                |
+| ------ | ------------------- | -------------------------------------- | ---------------------- |
+| GET    | `/api/items`        | —                                      | `{ items: Item[] }`    |
+| POST   | `/api/items`        | `multipart/form-data` with `file` field | `{ item }` (201)       |
+| POST   | `/api/items`        | `application/json` `{ text: string }`   | `{ item }` (201)       |
+| DELETE | `/api/items/:id`    | —                                      | `{ ok: true }`         |
+| GET    | `/api/files/:id`    | optional `?download=1`                 | streamed file response |
+
+## Configuration
+
+| Variable | Default | Purpose                          |
+| -------- | ------- | -------------------------------- |
+| `PORT`   | `3000`  | Server port (also used by banner) |
+
+Data directory is hard-coded to `./.localdrop`. Delete the directory to wipe everything.
+
+## Security
+
+LocalDrop has **no authentication**. Anyone who can reach the host on the LAN can upload, download, and delete. Use only on trusted networks (home, office). Do not expose to the public internet.
+
+If you need to restrict access, put it behind a reverse proxy with basic auth or run it only while needed.
+
+## Limits
+
+- Max upload size: 1 GB per file (enforced in `src/app/api/items/route.ts`)
+- No automatic expiry — items persist until manually deleted or the `.localdrop` directory is removed
+- No streaming/chunked upload; full file is buffered before write
+
+## License
+
+MIT
